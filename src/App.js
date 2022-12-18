@@ -2,9 +2,10 @@ import { ReactComponent as AirFlowIcon } from './images/airFlow.svg';
 import { ReactComponent as DayCloudyIcon } from './images/day-cloudy.svg';
 import { ReactComponent as RainIcon } from './images/rain.svg';
 import { ReactComponent as RefreshIcon } from './images/refresh.svg';
+import { ReactComponent as LoadingIcon } from './images/loading.svg';
 import styled from '@emotion/styled';
 import { ThemeProvider } from '@emotion/react';
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import dayjs from 'dayjs';
 
 const theme = {
@@ -119,46 +120,146 @@ const Refresh = styled.div`
     width: 15px;
     height: 15px;
     cursor: pointer;
+    animation: rotate infinite 1.5s linear;
+    animation-duration: ${({ isLoading }) => (isLoading ? '1.5s' : '0s')};
+  }
+  @keyframes rotate {
+    from {
+      transform: rotate(360deg);
+    }
+    to {
+      transform: rotate(0deg);
+    }
   }
 `;
 
-function App() {
+const AUTHORIZATION_KEY = 'CWB-7D5AD83B-E5B8-4B0C-9AA5-25E30F2ACD75';
+const LOCATION_NAME = '臺北';
+const LOCATION_NAME_FORECAST = '臺北市';
+
+const fetchCurrentWeather = () => {
+  return fetch(
+    `https://opendata.cwb.gov.tw/api/v1/rest/datastore/O-A0003-001?Authorization=${AUTHORIZATION_KEY}&locationName=${LOCATION_NAME}`
+  )
+    .then((response) => response.json())
+    .then((data) => {
+      const locationData = data.records.location[0];
+
+      const weatherElements = locationData.weatherElement.reduce((neededElements, item) => {
+        if (['WDSD', 'TEMP'].includes(item.elementName)) {
+          neededElements[item.elementName] = item.elementValue;
+        }
+        return neededElements
+      }, {});
+
+      return {
+        observationTime: locationData.time.obsTime,
+        locationName: locationData.locationName,
+        temperature: weatherElements.TEMP,
+        windSpeed: weatherElements.WDSD,
+      };
+    });
+};
+
+const fetchWeatherForecast = () => {
+  return fetch(
+    `https://opendata.cwb.gov.tw/api/v1/rest/datastore/F-C0032-001?Authorization=${AUTHORIZATION_KEY}&locationName=${LOCATION_NAME_FORECAST}`
+  )
+    .then((response) => response.json())
+    .then((data) => {
+      const locationData = data.records.location[0];
+
+      const weatherElements = locationData.weatherElement.reduce((neededElements, item) => {
+        if (['Wx', 'PoP', 'CI'].includes(item.elementName)) {
+          neededElements[item.elementName] = item.time[0].parameter;
+        }
+        return neededElements;
+      }, {});
+
+      return {
+        description: weatherElements.Wx.parameterName,
+        weatherCode: weatherElements.Wx.parameterValue,
+        rainPossibility: weatherElements.PoP.parameterName,
+        comfortability: weatherElements.CI.parameterName,
+      };
+    });
+};
+
+const App = () => {
   const [currentTheme, setCurrentTheme] = useState('light');
 
-  const [currentWeather, setCurrentWeather] = useState({
-    locationName: '臺北市',
-    description: '多雲時晴',
-    windSpeed: 1.1,
-    temperature: 22.9,
-    rainPossibility: 48.3,
-    observationTime: '2020-12-12 22:10:00',
+  const [weatherElement, setWeatherElement] = useState({
+    locationName: '',
+    description: '',
+    windSpeed: 0,
+    temperature: 0,
+    rainPossibility: 0,
+    observationTime: new Date(),
+    comfortability: '',
+    weatherCode: 0,
+    isLoading: true,
   });
+
+  const {
+    locationName,
+    description,
+    windSpeed,
+    temperature,
+    rainPossibility,
+    observationTime,
+    comfortability,
+    weatherCode,
+    isLoading,
+  } = weatherElement;
+
+  const fetchData = useCallback(async () => {
+    setWeatherElement((prevState) => ({
+      ...prevState,
+      isLoading: true,
+    }));
+
+    const [currentWeather, weatherForecast] = await Promise.allSettled([fetchCurrentWeather(), fetchWeatherForecast()]);
+
+    setWeatherElement({
+      ...currentWeather.value,
+      ...weatherForecast.value,
+      isLoading: false
+    });
+  }, []);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
   return (
     <ThemeProvider theme={theme[currentTheme]}>
       <Container>
         <WeatherCard>
-          <Location>{currentWeather.locationName}</Location>
-          <Description>{currentWeather.description}</Description>
+          <Location>{locationName}</Location>
+          <Description>{description} {comfortability}</Description>
           <CurrentWeather>
             <Temperature>
-              {Math.round(currentWeather.temperature)}<Celsius>°C</Celsius>
+              {Math.round(temperature)}<Celsius>°C</Celsius>
             </Temperature>
             <DayCloudy />
           </CurrentWeather>
           <AirFlow>
-            <AirFlowIcon />{currentWeather.windSpeed} m/h
+            <AirFlowIcon />{windSpeed} m/h
           </AirFlow>
           <Rain>
-            <RainIcon />{currentWeather.rainPossibility}
+            <RainIcon />{rainPossibility}
           </Rain>
-          <Refresh>
+          <Refresh
+            onClick={fetchData}
+            isLoading={isLoading}
+          >
             最後觀測時間: {
               new Intl.DateTimeFormat('zh-TW', {
                 hour: 'numeric',
                 minute: 'numeric',
-              }).format(dayjs(currentWeather.observationTime))
+              }).format(dayjs(observationTime))
             }
-            <RefreshIcon />
+            { isLoading ? <LoadingIcon /> : <RefreshIcon /> }
           </Refresh>
         </WeatherCard>
       </Container>
