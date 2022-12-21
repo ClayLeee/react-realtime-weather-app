@@ -40,7 +40,9 @@ export const getMoment = (locationName) => {
     `${locationDate.dataTime} ${locationDate.sunset}`
   ).getTime();
   const nowTimeStamp = now.getTime();
-
+  console.log(sunriseTimestamp);
+  console.log(sunsetTimestamp);
+  console.log(nowTimeStamp);
   // STEP 9：若當前時間介於日出和日落中間，則表示為白天，否則為晚上
   return sunriseTimestamp <= nowTimeStamp && nowTimeStamp <= sunsetTimestamp
     ? 'day'
