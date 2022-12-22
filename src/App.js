@@ -89,7 +89,6 @@ const App = () => {
 
   const moment = useMemo(() => getMoment(LOCATION_NAME_FORECAST), []);
 
-  console.log(moment);
   useEffect(() => {
     setCurrentTheme(moment === 'day' ? 'light' : 'dark');
   }, [moment]);
